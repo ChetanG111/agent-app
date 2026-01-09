@@ -1,13 +1,14 @@
-// Agent Drawer Component
+// Agent Drawer Component with Unique Colors
 
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useStore, selectSelectedAgent, selectAgentMessages } from '@/store';
+import { useStore, selectSelectedAgent } from '@/store';
 import { Drawer, Badge, Button } from './ui';
 import { fetchAgentHistory, sendMessage } from '@/lib/api';
 import { Message } from '@/types';
 import { toast } from 'react-hot-toast';
+import { getAgentColor } from '@/lib/colors';
 
 function formatTimestamp(date: Date): string {
     return date.toLocaleTimeString('en-US', {
@@ -26,6 +27,9 @@ export function AgentDrawer() {
 
     const { ui, closeAgentDrawer, addMessage } = useStore();
     const selectedAgent = useStore(selectSelectedAgent);
+
+    // Get agent color
+    const agentColor = selectedAgent ? getAgentColor(selectedAgent.id) : null;
 
     // Fetch agent history when drawer opens
     useEffect(() => {
@@ -68,7 +72,7 @@ export function AgentDrawer() {
         }
     };
 
-    if (!selectedAgent) return null;
+    if (!selectedAgent || !agentColor) return null;
 
     return (
         <Drawer
@@ -76,15 +80,21 @@ export function AgentDrawer() {
             onClose={closeAgentDrawer}
             title={selectedAgent.name}
         >
-            {/* Agent Status */}
-            <div className="px-4 py-3 border-b border-gray-700">
+            {/* Agent Header with Color */}
+            <div className={`px-4 py-3 border-b ${agentColor.border} bg-gradient-to-r ${agentColor.gradient}`}>
+                <div className="flex items-center gap-3 mb-3">
+                    <div className={`w-4 h-4 rounded-full ${agentColor.dot}`} />
+                    <span className={`text-lg font-semibold ${agentColor.text}`}>
+                        {selectedAgent.name}
+                    </span>
+                </div>
                 <div className="flex items-center justify-between mb-2">
                     <span className="text-sm text-gray-400">Status</span>
                     <Badge status={selectedAgent.status} />
                 </div>
                 <div className="flex items-center justify-between">
                     <span className="text-sm text-gray-400">Current Task</span>
-                    <span className="text-sm text-gray-200">{selectedAgent.currentTask}</span>
+                    <span className="text-sm text-gray-200">{selectedAgent.currentTask || 'No active task'}</span>
                 </div>
             </div>
 
@@ -96,23 +106,24 @@ export function AgentDrawer() {
 
                 {loading ? (
                     <div className="flex items-center justify-center py-8 text-gray-500">
-                        Loading...
+                        <div className="w-5 h-5 border-2 border-gray-500 border-t-transparent rounded-full animate-spin" />
                     </div>
                 ) : history.length === 0 ? (
-                    <div className="flex items-center justify-center py-8 text-gray-500 text-sm">
-                        No messages with this agent
+                    <div className="flex flex-col items-center justify-center py-8 text-gray-500 text-sm">
+                        <span>No messages with this agent</span>
+                        <span className="text-xs text-gray-600 mt-1">Send a message to start communicating</span>
                     </div>
                 ) : (
                     history.map(msg => (
                         <div
                             key={msg.id}
                             className={`p-2 rounded text-sm ${msg.sender === 'human'
-                                    ? 'bg-yellow-500/10 border border-yellow-500/20'
-                                    : 'bg-gray-800 border border-gray-700'
+                                ? 'bg-yellow-500/10 border border-yellow-500/20'
+                                : `${agentColor.bg} border ${agentColor.border}`
                                 }`}
                         >
                             <div className="flex items-center justify-between mb-1">
-                                <span className={msg.sender === 'human' ? 'text-yellow-400' : 'text-cyan-400'}>
+                                <span className={msg.sender === 'human' ? 'text-yellow-400' : agentColor.text}>
                                     {msg.sender === 'human' ? 'You' : selectedAgent.name}
                                 </span>
                                 <span className="text-xs text-gray-600">
@@ -136,7 +147,7 @@ export function AgentDrawer() {
                         onKeyDown={handleKeyDown}
                         placeholder="Message agent... (Cmd+Enter)"
                         disabled={sending}
-                        className="flex-1 px-3 py-2 bg-gray-800 border border-gray-700 rounded text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-gray-600 disabled:opacity-50"
+                        className={`flex-1 px-3 py-2 bg-gray-800 border border-gray-700 rounded text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:${agentColor.border} disabled:opacity-50`}
                     />
                     <Button onClick={handleSendMessage} disabled={!agentInput.trim() || sending}>
                         Send

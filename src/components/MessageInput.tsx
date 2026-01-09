@@ -1,11 +1,21 @@
-// Message Input Component
+// Message Input Component with Master Agent Integration
 
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
 import { useStore } from '@/store';
-import { executeSlashCommand } from '@/lib/api';
+import { executeSlashCommand, addAgent } from '@/lib/api';
 import { toast } from 'react-hot-toast';
+import { Agent } from '@/types';
+
+interface MasterAgentResult {
+    response: string;
+    agentUsed?: {
+        id: string;
+        name: string;
+        role: string;
+    };
+}
 
 export function MessageInput() {
     const [message, setMessage] = useState('');
@@ -14,7 +24,7 @@ export function MessageInput() {
     const inputRef = useRef<HTMLInputElement>(null);
     const dropdownRef = useRef<HTMLDivElement>(null);
 
-    const { ui, setActiveSender, sendMessage } = useStore();
+    const { ui, setActiveSender, sendMessage, addMessage, agents, tasks, messages } = useStore();
 
     // Close dropdown when clicking outside
     useEffect(() => {
@@ -26,6 +36,64 @@ export function MessageInput() {
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
+
+    // Get Master Agent response from API
+    const getMasterAgentResponse = async (humanMessage: string): Promise<MasterAgentResult | null> => {
+        try {
+            const response = await fetch('/api/master-agent', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    message: humanMessage,
+                    agents: agents.map(a => ({
+                        id: a.id,
+                        name: a.name,
+                        status: a.status,
+                        currentTask: a.currentTask,
+                    })),
+                    tasks: tasks.map(t => ({
+                        id: t.id,
+                        title: t.title,
+                        status: t.status,
+                        assignedAgents: t.assignedAgents,
+                    })),
+                    recentMessages: messages.slice(-10).map(m => ({
+                        sender: m.sender,
+                        agentName: m.agentName,
+                        text: m.text,
+                    })),
+                }),
+            });
+
+            if (!response.ok) {
+                console.error('[Master Agent] API error:', response.status);
+                return null;
+            }
+
+            const data = await response.json();
+
+            // If an agent was spawned, add it to local state
+            if (data.agentUsed) {
+                const newAgent: Agent = {
+                    id: data.agentUsed.id,
+                    name: data.agentUsed.name,
+                    currentTask: `Completed (${data.agentUsed.role})`,
+                    status: 'idle',
+                    lastActive: new Date(),
+                };
+                addAgent(newAgent);
+                console.log('[MessageInput] Agent spawned and added:', newAgent.name);
+            }
+
+            return {
+                response: data.response,
+                agentUsed: data.agentUsed,
+            };
+        } catch (error) {
+            console.error('[Master Agent] Request failed:', error);
+            return null;
+        }
+    };
 
     const handleSubmit = async () => {
         const text = message.trim();
@@ -40,7 +108,7 @@ export function MessageInput() {
 
                 // Add command result to feed
                 await sendMessage(
-                    `[Command] ${text} - ${result.message}`,
+                    `[Command] ${text} → ${result.message}`,
                     'master'
                 );
 
@@ -52,6 +120,12 @@ export function MessageInput() {
                             border: '1px solid #374151',
                         },
                     });
+
+                    // Refresh agents after command (for status changes)
+                    if (result.action === 'PAUSE_ALL' || result.action === 'RESUME_ALL' || result.action === 'KILL_ALL') {
+                        // Trigger a re-fetch (store will handle)
+                        useStore.getState().fetchAgents();
+                    }
                 } else {
                     toast.error(result.message, {
                         style: {
@@ -64,6 +138,25 @@ export function MessageInput() {
             } else {
                 // Regular message
                 await sendMessage(text, ui.activeSender);
+
+                // If sender is Human, get Master Agent response
+                if (ui.activeSender === 'human') {
+                    const masterResponse = await getMasterAgentResponse(text);
+
+                    if (masterResponse) {
+                        // Add Master Agent response to the feed
+                        addMessage({
+                            id: `msg-master-${Date.now()}`,
+                            sender: 'master',
+                            agentName: 'Master Agent',
+                            text: masterResponse.response,
+                            timestamp: new Date(),
+                        });
+
+                        // Refresh agents list (Master Agent may have spawned new agents)
+                        useStore.getState().fetchAgents();
+                    }
+                }
             }
 
             setMessage('');
@@ -132,10 +225,17 @@ export function MessageInput() {
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
                     onKeyDown={handleKeyDown}
-                    placeholder="Type instruction... (Cmd+Enter to send)"
+                    placeholder={isLoading ? "Processing..." : "Type instruction... (Cmd+Enter to send)"}
                     disabled={isLoading}
                     className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded text-gray-200 placeholder-gray-500 focus:outline-none focus:border-gray-600 disabled:opacity-50"
                 />
+
+                {/* Loading indicator */}
+                {isLoading && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                        <div className="w-4 h-4 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+                    </div>
+                )}
             </div>
 
             {/* Send Button */}

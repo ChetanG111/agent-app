@@ -1,10 +1,11 @@
-// Agents List Component
+// Agents List Component with Unique Colors
 
 'use client';
 
 import { useStore } from '@/store';
 import { Badge, AgentSkeleton } from './ui';
 import { Agent } from '@/types';
+import { getAgentColor } from '@/lib/colors';
 
 function formatTimeAgo(date: Date): string {
     const now = new Date();
@@ -21,13 +22,13 @@ function formatTimeAgo(date: Date): string {
     return `${diffDays}d ago`;
 }
 
-function getStatusDotColor(status: Agent['status']): string {
+function getStatusIndicator(status: Agent['status']): { ring: string; pulse: boolean } {
     switch (status) {
-        case 'active': return 'bg-emerald-400';
-        case 'stuck': return 'bg-red-400';
-        case 'offline': return 'bg-gray-500';
-        case 'idle': return 'bg-yellow-400';
-        default: return 'bg-gray-400';
+        case 'active': return { ring: 'ring-emerald-400/50', pulse: true };
+        case 'stuck': return { ring: 'ring-red-400/50', pulse: true };
+        case 'offline': return { ring: 'ring-gray-500/50', pulse: false };
+        case 'idle': return { ring: 'ring-yellow-400/50', pulse: false };
+        default: return { ring: 'ring-gray-400/50', pulse: false };
     }
 }
 
@@ -37,15 +38,26 @@ interface AgentItemProps {
 }
 
 function AgentItem({ agent, onClick }: AgentItemProps) {
+    const color = getAgentColor(agent.id);
+    const statusIndicator = getStatusIndicator(agent.status);
+
     return (
         <button
             onClick={onClick}
-            className="w-full text-left p-3 border-b border-gray-800 hover:bg-gray-800/50 transition-colors cursor-pointer"
+            className={`w-full text-left p-3 border-b border-gray-800 hover:bg-gradient-to-r ${color.gradient} transition-all duration-200 cursor-pointer group`}
         >
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                    <div className={`w-2 h-2 rounded-full ${getStatusDotColor(agent.status)}`} />
-                    <span className="font-medium text-gray-200">{agent.name}</span>
+                    {/* Agent color dot with status ring */}
+                    <div className="relative">
+                        <div className={`w-3 h-3 rounded-full ${color.dot} ring-2 ${statusIndicator.ring}`} />
+                        {statusIndicator.pulse && (
+                            <div className={`absolute inset-0 w-3 h-3 rounded-full ${color.dot} animate-ping opacity-50`} />
+                        )}
+                    </div>
+                    <span className={`font-medium ${color.text} group-hover:brightness-110`}>
+                        {agent.name}
+                    </span>
                 </div>
                 {(agent.status === 'stuck' || agent.status === 'offline') && (
                     <Badge status={agent.status} />
@@ -79,7 +91,8 @@ export function AgentsList() {
                 <svg className="w-12 h-12 mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                 </svg>
-                <p>No agents available</p>
+                <p>No agents registered</p>
+                <p className="text-xs mt-1">Agents will appear here when they connect</p>
             </div>
         );
     }

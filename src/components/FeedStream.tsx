@@ -1,4 +1,4 @@
-// Feed Stream Component
+// Feed Stream Component with Agent Colors
 
 'use client';
 
@@ -6,6 +6,7 @@ import { useEffect, useRef } from 'react';
 import { useStore } from '@/store';
 import { MessageSkeleton } from './ui';
 import { Message, SenderType } from '@/types';
+import { getAgentColorByName } from '@/lib/colors';
 
 function formatTimestamp(date: Date): string {
     return date.toLocaleTimeString('en-US', {
@@ -16,12 +17,20 @@ function formatTimestamp(date: Date): string {
     });
 }
 
-function getSenderColor(sender: SenderType, isError?: boolean): string {
-    if (isError) return 'text-red-400';
-    switch (sender) {
+function getSenderColor(message: Message): string {
+    if (message.isError) return 'text-red-400';
+
+    switch (message.sender) {
         case 'master': return 'text-emerald-400';
         case 'human': return 'text-yellow-400';
-        case 'agent': return 'text-cyan-400';
+        case 'agent': {
+            // Use unique color for each agent
+            if (message.agentName) {
+                const agentColor = getAgentColorByName(message.agentName);
+                return agentColor.text;
+            }
+            return 'text-cyan-400';
+        }
         default: return 'text-gray-400';
     }
 }
@@ -37,14 +46,14 @@ interface FeedMessageProps {
 }
 
 function FeedMessage({ message }: FeedMessageProps) {
-    const senderColor = getSenderColor(message.sender, message.isError);
+    const senderColor = getSenderColor(message);
 
     return (
         <div className="flex gap-2 px-4 py-0.5 font-mono text-sm hover:bg-gray-800/30 transition-colors">
             <span className="text-gray-600 shrink-0">
                 [{formatTimestamp(message.timestamp)}]
             </span>
-            <span className={`shrink-0 ${senderColor}`}>
+            <span className={`shrink-0 font-medium ${senderColor}`}>
                 {getSenderName(message)}:
             </span>
             <span className={message.isError ? 'text-red-300' : 'text-gray-300'}>
@@ -106,8 +115,9 @@ export function FeedStream({ isConnected = true }: FeedStreamProps) {
                         <MessageSkeleton />
                     </>
                 ) : messages.length === 0 ? (
-                    <div className="flex items-center justify-center h-full text-gray-600 text-sm">
-                        No messages yet
+                    <div className="flex flex-col items-center justify-center h-full text-gray-600 text-sm py-8">
+                        <span>Awaiting agent communications...</span>
+                        <span className="text-xs text-gray-700 mt-1">Messages will appear here in real-time</span>
                     </div>
                 ) : (
                     messages.map(message => (

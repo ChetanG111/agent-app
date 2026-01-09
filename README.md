@@ -1,6 +1,6 @@
 # Agent Control – Coordination Dashboard
 
-A fully interactive internal tool for managing and coordinating AI agents, built with Next.js 14+, TypeScript, Tailwind CSS, and Zustand.
+A control plane for autonomous LLM agents, built with Next.js 14+, TypeScript, Tailwind CSS, Zustand, and **Groq API** (llama-3.3-70b-versatile).
 
 ![Dashboard Preview](./docs/preview.png)
 
@@ -78,40 +78,68 @@ src/
 | Command | Effect |
 |---------|--------|
 | `/pause` | Pause all agents |
+| `/resume` | Resume all agents |
 | `/kill` | Terminate all agents |
 | `/reassign` | Initiate task reassignment |
+| `/status` | Get system status |
+| `/help` | List available commands |
+
+## Master Agent (Groq Integration)
+
+The Master Agent uses **Groq API** with `llama-3.3-70b-versatile` to:
+
+- Respond intelligently to human instructions
+- Analyze agent and task states
+- Suggest remediation for stuck agents
+- Parse complex slash commands
+
+### Setup
+
+1. Get a Groq API key from [console.groq.com](https://console.groq.com)
+
+2. Create `.env.local`:
+   ```env
+   GROQ_API_KEY=your_groq_api_key_here
+   GROQ_MODEL=llama-3.3-70b-versatile
+   NEXT_PUBLIC_MOCK_MODE=true
+   ```
+
+3. When you send a message as "Human", the Master Agent automatically responds.
 
 ## Connecting a Real Backend
 
-The app uses a mock API layer by default. To connect to a real backend:
+Toggle mock mode off to use real endpoints:
 
-1. **Update environment variables**:
-   ```env
-   NEXT_PUBLIC_API_URL=https://your-api.com
-   NEXT_PUBLIC_WS_URL=wss://your-api.com
-   NEXT_PUBLIC_MOCK_MODE=false
-   ```
+```env
+NEXT_PUBLIC_API_URL=https://your-api.com
+NEXT_PUBLIC_WS_URL=wss://your-api.com/ws
+NEXT_PUBLIC_MOCK_MODE=false
+```
 
-2. **Replace mock API** in `src/lib/api.ts`:
-   ```typescript
-   export async function fetchAgents(): Promise<Agent[]> {
-     const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/agents`);
-     return res.json();
-   }
-   ```
+The API layer (`src/lib/api.ts`) and WebSocket layer (`src/lib/socket.ts`) automatically switch between mock and real based on this flag.
 
-3. **Replace WebSocket simulation** in `src/lib/socket.ts`:
-   ```typescript
-   const socket = new WebSocket(process.env.NEXT_PUBLIC_WS_URL);
-   socket.onmessage = (event) => {
-     const data = JSON.parse(event.data);
-     // Handle incoming messages
-   };
-   ```
+### API Endpoints (Expected)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/agents` | GET | List all agents |
+| `/agents/:id/status` | PATCH | Update agent status |
+| `/tasks` | GET | List all tasks |
+| `/tasks/:id/status` | PATCH | Update task status |
+| `/messages` | GET/POST | Get/send messages |
+| `/commands` | POST | Execute slash command |
+
+### WebSocket Events (Expected)
+
+```typescript
+// Server → Client events
+{ type: 'agent_update', payload: { agentId, status } }
+{ type: 'task_update', payload: { taskId, status } }
+{ type: 'message', payload: Message }
+{ type: 'agent_stuck', payload: { agentId } }
+```
 
 ## API Reference
-
-The mock API expects/returns these shapes:
 
 ```typescript
 interface Agent {
@@ -148,8 +176,31 @@ interface Message {
 - **Language**: TypeScript
 - **Styling**: Tailwind CSS 4
 - **State**: Zustand
+- **LLM**: Groq API (llama-3.3-70b-versatile)
 - **Notifications**: react-hot-toast
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                     Frontend (Control Plane)            │
+├─────────────────────────────────────────────────────────┤
+│  UI Components → Zustand Store → API/Socket Layer       │
+│                        ↓                                │
+│              ┌────────────────────┐                     │
+│              │   Mock Backend     │  (Phase 1)          │
+│              │   or               │                     │
+│              │   Real Backend     │  (Phase 2)          │
+│              └────────────────────┘                     │
+│                        ↓                                │
+│              ┌────────────────────┐                     │
+│              │   Groq API         │                     │
+│              │   (Master Agent)   │                     │
+│              └────────────────────┘                     │
+└─────────────────────────────────────────────────────────┘
+```
 
 ## License
 
 Internal tool – not for public distribution.
+
